@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ai-quiz-helper
+    env: docker
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: APP_PUBLIC_URL
+        value: https://ai-quiz-helper.onrender.com
+    # Optional: set to disable Selenium if Chrome issues arise
+      - key: DISABLE_SELENIUM
+        value: "false"

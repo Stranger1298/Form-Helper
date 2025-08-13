@@ -1,0 +1,8 @@
+streamlit>=1.36.0
+pillow
+pytesseract
+openai>=1.0.0
+selenium
+webdriver-manager
+beautifulsoup4
+requests
