@@ -11,7 +11,7 @@ import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException, WebDriverException
+from selenium.common.exceptions import NoSuchElementException, WebDriverException, SessionNotCreatedException
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
 from bs4 import BeautifulSoup
@@ -158,8 +158,18 @@ def start_selenium_driver():
     chrome_options.add_argument("--metrics-recording-only")
     chrome_prefs = {"profile.managed_default_content_settings.images": 2}
     chrome_options.experimental_options["prefs"] = chrome_prefs
-    service = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=chrome_options)
+    # Attempt 1: use system chromedriver (likely matches chromium installed in container)
+    try:
+        return webdriver.Chrome(options=chrome_options)
+    except SessionNotCreatedException as e_version:
+        # Version mismatch specific guidance
+        raise RuntimeError("ChromeDriver session not created due to version mismatch. Consider keeping DISABLE_SELENIUM=true on Render or pin a matching Chrome version.") from e_version
+    except Exception as e_primary:
+        try:
+            service = Service(ChromeDriverManager().install())
+            return webdriver.Chrome(service=service, options=chrome_options)
+        except Exception as e_fallback:
+            raise RuntimeError(f"Unable to start ChromeDriver. Primary: {e_primary}; Fallback: {e_fallback}")
 
 @st.cache_data(show_spinner=False, ttl=600)
 def fast_scrape_google_form(url: str):
@@ -287,9 +297,12 @@ def scrape_google_form(url, timeout=15):
     t0 = time.time()
     fast = fast_scrape_google_form(url)
     method = "fast"
-    if not fast:
+    if not fast and os.getenv("DISABLE_SELENIUM", "true").lower() != "true":
         method = "selenium"
-        fast = selenium_scrape_google_form(url, timeout=timeout)
+        try:
+            fast = selenium_scrape_google_form(url, timeout=timeout)
+        except RuntimeError as e:
+            st.warning(f"Selenium fallback failed: {e}")
     elapsed = (time.time() - t0) * 1000
     # Attach perf metadata (not shown to user unless debug enabled)
     st.session_state["last_scrape_perf"] = {"method": method, "ms": round(elapsed, 1)}
